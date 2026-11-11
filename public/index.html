@@ -127,6 +127,10 @@ const $ = id => document.getElementById(id);
 $('urlInput').addEventListener('keydown', e => { if(e.key==='Enter') run('both'); });
 if (FORCE_KEY) window.addEventListener('DOMContentLoaded', () => { const el=$('compareLink'); if(el) el.innerHTML='<a href="/compare?fk='+encodeURIComponent(FORCE_KEY)+'">Compare against competitors →</a>'; });
 
+// Deep link from wintechpartners.com/seo-aeo: ?url=example.com starts the website scan.
+const PRESET_URL = new URLSearchParams(location.search).get('url');
+if (PRESET_URL) window.addEventListener('DOMContentLoaded', () => { $('urlInput').value = PRESET_URL; run('website'); });
+
 function setStatus(t, err){ const s=$('status'); s.className = err ? 'status error' : 'status'; s.innerHTML = t; }
 function modesDisabled(d){ document.querySelectorAll('.mode-btn').forEach(b=>b.disabled=d); }
 
