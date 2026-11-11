@@ -4,12 +4,14 @@
 require('dotenv').config();
 const { runVisibility } = require('../lib/visibility');
 
-const args = process.argv.slice(2).filter((a) => a !== '--json');
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const [url, questions, runs, model] = args;
+const metroArg = process.argv.find((a) => a.startsWith('--metro='));
 if (!url) { console.error('Usage: node scripts/run-visibility.js <url> [questions] [runs] [model]'); process.exit(1); }
 
 const opts = { questions: Number(questions) || 10, runs: Number(runs) || 1 };
 if (model) opts.model = model;
+if (metroArg) opts.metro = metroArg.slice(8);
 
 runVisibility(url, opts).then((r) => {
   if (process.argv.includes('--json')) return console.log(JSON.stringify(r, null, 2));
