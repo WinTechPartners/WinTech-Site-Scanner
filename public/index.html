@@ -31,6 +31,7 @@
   .mode-btn.website:hover { background:#6366f111; }
   .mode-btn.audience:hover { background:#22c55e11; border-color:#22c55e; }
   .mode-btn.both:hover { background:#f59e0b11; border-color:#f59e0b; }
+  .mode-btn.visibility:hover { background:#a5b4fc11; border-color:#a5b4fc; }
   .mode-btn:disabled { opacity:.5; cursor:not-allowed; }
 
   .status { max-width:600px; margin:16px auto 0; text-align:center; font-size:13px; color:#64748b; min-height:20px; }
@@ -103,6 +104,7 @@
       <button class="mode-btn website" onclick="run('website')"><b>Website Intel</b><small>11-dimension audit</small></button>
       <button class="mode-btn audience" onclick="run('audience')"><b>Audience Intel</b><small>who + goal, by 3 AIs</small></button>
       <button class="mode-btn both" onclick="run('both')"><b>Both</b><small>full picture</small></button>
+      <button class="mode-btn visibility" onclick="run('visibility')"><b>AI Visibility</b><small style="font-size:13px;color:#cbd5e1">does AI name you?</small></button>
     </div>
     <div class="status" id="status"></div>
   </div>
@@ -118,7 +120,7 @@
 
 <script>
 const FORCE_KEY = new URLSearchParams(location.search).get('fk') || '';
-let pending = { scanId: null, audienceUrl: null };
+let pending = { scanId: null, audienceUrl: null, visibilityUrl: null };
 
 function sc(s){ if(s>=80)return'#22c55e'; if(s>=60)return'#f59e0b'; if(s>=40)return'#f97316'; return'#ef4444'; }
 function grade(s){ if(s>=90)return'A'; if(s>=80)return'B'; if(s>=60)return'C'; if(s>=40)return'D'; return'F'; }
@@ -137,13 +139,14 @@ function modesDisabled(d){ document.querySelectorAll('.mode-btn').forEach(b=>b.d
 async function run(mode){
   const url = $('urlInput').value.trim();
   if(!url){ setStatus('Enter a website URL.', true); return; }
-  pending = { scanId:null, audienceUrl:null };
+  pending = { scanId:null, audienceUrl:null, visibilityUrl:null };
   $('results').innerHTML = ''; $('results').classList.remove('show');
   modesDisabled(true);
   setStatus('<span class="spinner"></span>Analyzing ' + esc(url) + '…');
   try {
     if(mode==='website' || mode==='both') await runWebsite(url);
     if(mode==='audience' || mode==='both') await runAudience(url);
+    if(mode==='visibility') showVisibilityCard(url);
     renderGate();
     setStatus('');
     $('results').classList.add('show');
@@ -185,12 +188,33 @@ async function runAudience(url){
     '<div id="audDeep"></div></div>');
 }
 
-// One shared email gate for whatever is pending (website report, audience deep, or both).
+// AI Visibility has no free preview (every run costs search fees), so the card explains it and the gate runs it.
+function showVisibilityCard(url){
+  pending.visibilityUrl = url;
+  $('results').insertAdjacentHTML('beforeend',
+    '<div class="card" id="viscard"><h2>AI Visibility</h2><div class="dom">'+esc(url)+'</div>'+
+    '<p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:10px 0 14px">We ask an AI answer engine 10 questions your buyers ask, with live web search on, then check whether it names you, who it names instead, and which sites it cites. It takes about a minute after you unlock.</p>'+
+    '<input class="scan-input" type="text" id="visMetro" placeholder="City or metro you serve (optional), for example Dallas, TX" autocomplete="off">'+
+    '<div id="visResult"></div></div>');
+}
+
+function renderVisibility(d){
+  const s = d.summary || {}, pc = v => (v===null||v===undefined) ? 'n/a' : v+'%';
+  const others = (s.shareOfVoice||[]).filter(x => x.name !== (d.profile||{}).brand).slice(0,5).map(x => esc(x.name)).join(', ');
+  $('visResult').innerHTML = '<div class="gate" style="border-top:1px solid #1e293b;margin-top:14px">'+
+    '<div class="aud-row"><div class="k" style="font-size:13px">Named when buyers did not know you</div><div class="v">'+pc(s.unbrandedVisibility)+' of answers</div></div>'+
+    '<div class="aud-row"><div class="k" style="font-size:13px">Named when asked about you by name</div><div class="v">'+pc(s.brandedVisibility)+' of answers</div></div>'+
+    '<div class="aud-row"><div class="k" style="font-size:13px">Who AI named most</div><div class="v">'+(others||'no companies named')+'</div></div>'+
+    '<div style="margin-top:16px"><a href="'+d.reportUrl+'" target="_blank" rel="noopener" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px">Open full report &amp; download PDF →</a></div></div>';
+}
+
+// One shared email gate for whatever is pending (website report, audience deep, AI visibility).
 function renderGate(){
-  if(!pending.scanId && !pending.audienceUrl) return;
+  if(!pending.scanId && !pending.audienceUrl && !pending.visibilityUrl) return;
   const parts = [];
   if(pending.scanId) parts.push('the full website report');
   if(pending.audienceUrl) parts.push('the deeper audience analysis');
+  if(pending.visibilityUrl) parts.push('your AI Visibility report');
   $('results').insertAdjacentHTML('beforeend',
     '<div class="card" id="gateCard"><h2>Unlock '+parts.join(' and ')+'</h2>'+
     '<p style="color:#94a3b8;font-size:14px;margin-bottom:14px">Enter a work email at the site\'s domain. We\'ll unlock it here and email it to you. Need help? <a href="mailto:support@wintechpartners.com">support@wintechpartners.com</a></p>'+
@@ -220,6 +244,13 @@ async function unlockAll(){
       const r = await fetch('/api/audience', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: pending.audienceUrl, deep:true, email }) });
       const d = await r.json();
       if(d.status==='deep'){ emailed = emailed || !!d.emailed; audienceId = d.reportId; renderDeepAudience(d, bothMode); pending.audienceUrl=null; }
+      else { gateErr = d.message || d.error || 'Could not unlock.'; }
+    }
+    if(!gateErr && pending.visibilityUrl){
+      msg.style.color='#cbd5e1'; msg.textContent='Asking AI the questions your buyers ask. This takes about a minute…';
+      const r = await fetch('/api/visibility', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: pending.visibilityUrl, email, metro: ($('visMetro')||{}).value || '' }) });
+      const d = await r.json();
+      if(d.status==='done'){ emailed = emailed || !!d.emailed; renderVisibility(d); pending.visibilityUrl=null; }
       else { gateErr = d.message || d.error || 'Could not unlock.'; }
     }
   } catch(e){ gateErr = 'Something went wrong. Try again.'; }

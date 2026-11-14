@@ -7,6 +7,8 @@ const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 const { fullScan, quickScan, checkWpExposure } = require('./lib/scanner');
 const db = require('./lib/db');
+const { runVisibility } = require('./lib/visibility');
+const { visibilityReportHtml } = require('./lib/visibility-report');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -566,6 +568,55 @@ app.get('/audience/:id', async (req, res) => {
   } catch (err) {
     console.error('[AUDIENCE PAGE]', err);
     res.status(500).send('Error loading audience report');
+  }
+});
+
+// ============================================================
+// API: AI VISIBILITY  (gated by matching email; one paid run per domain per cache window)
+// ============================================================
+const VISIBILITY_QUESTIONS = parseInt(process.env.VISIBILITY_QUESTIONS || '10', 10);
+const VISIBILITY_CACHE_DAYS = 30;
+
+app.post('/api/visibility', async (req, res) => {
+  const { url, email, metro } = req.body || {};
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+  if (!OPENROUTER_API_KEY) return res.status(503).json({ error: 'AI Visibility is not configured yet. Set OPENROUTER_API_KEY.' });
+
+  try {
+    const u = String(url).startsWith('http') ? String(url) : 'https://' + url;
+    const domain = new URL(u).hostname.toLowerCase().replace(/^www\./, '');
+    const gate = await gateAccess(email, domain);
+    if (!gate.ok) return res.status(403).json(gate);
+
+    // Every run costs search and model fees, so a domain is re-measured at most once per cache window.
+    let rec = await db.getLatestVisibility(domain);
+    const cached = !!rec && (Date.now() - new Date(rec.created_at).getTime()) < VISIBILITY_CACHE_DAYS * 86400000;
+    if (!cached) {
+      const result = await runVisibility(u, { questions: VISIBILITY_QUESTIONS, metro: String(metro || '').trim().slice(0, 80) });
+      rec = await db.saveVisibilityReport({ domain, result });
+    }
+    await db.recordScanHistory({ email, domain, kind: 'visibility' });
+    const r = typeof rec.result === 'string' ? JSON.parse(rec.result) : rec.result;
+    const reportUrl = '/visibility/' + rec.id;
+    const emailed = await sendEmail(email, `Your AI Visibility report: ${domain}`, emailShell(
+      `<h2 style="margin:0 0 8px">Your AI Visibility report is ready</h2>
+       <p style="color:#475569">We asked an AI answer engine the questions buyers ask and checked whether it names <strong>${esc(domain)}</strong>, who it names instead, and which sites it cites.</p>
+       <p style="margin:18px 0"><a href="${esc(absBase(req) + reportUrl)}" style="background:#6366f1;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px;display:inline-block">Open your report</a></p>`));
+    return res.json({ status: 'done', domain, reportId: rec.id, reportUrl, emailed, cached, profile: r.profile, summary: r.summary });
+  } catch (err) {
+    console.error('[VISIBILITY ERROR]', err);
+    return res.status(500).json({ error: 'AI Visibility check failed: ' + err.message });
+  }
+});
+
+app.get('/visibility/:id', async (req, res) => {
+  try {
+    const rec = await db.getVisibilityById(parseInt(req.params.id));
+    if (!rec) return res.status(404).send('AI Visibility report not found');
+    res.send(visibilityReportHtml(rec));
+  } catch (err) {
+    console.error('[VISIBILITY PAGE]', err);
+    res.status(500).send('Error loading AI Visibility report');
   }
 });
 
