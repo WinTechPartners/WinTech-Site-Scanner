@@ -12,6 +12,8 @@ if (!url) { console.error('Usage: node scripts/run-visibility.js <url> [question
 const opts = { questions: Number(questions) || 10, runs: Number(runs) || 1 };
 if (model) opts.model = model;
 if (metroArg) opts.metro = metroArg.slice(8);
+const enginesArg = process.argv.find((a) => a.startsWith('--engines=')); // e.g. --engines=chatgpt,gemini,claude,grok
+if (enginesArg) opts.engines = enginesArg.slice(10);
 
 runVisibility(url, opts).then((r) => {
   if (process.argv.includes('--json')) return console.log(JSON.stringify(r, null, 2));
@@ -20,6 +22,7 @@ runVisibility(url, opts).then((r) => {
   console.log(`Category: ${r.profile.category}`);
   console.log(`\nVisibility:      ${s.visibility}% of ${s.answers} answers mention the brand`);
   console.log(`  unbranded:     ${s.unbrandedVisibility}%   branded: ${s.brandedVisibility}%`);
+  (s.byEngine || []).forEach((e) => console.log(`  ${e.label}: unbranded ${e.unbrandedVisibility}%, branded ${e.brandedVisibility}%, ${e.answers} answers, names most: ${e.topNamed.join(', ')}`));
   console.log(`Own site cited:  ${s.citationRate}% of answers`);
   console.log(`Sentiment:       ${s.positiveSentiment === null ? 'n/a (never mentioned)' : s.positiveSentiment + '% positive when mentioned'}`);
   console.log('\nShare of voice:'); s.shareOfVoice.forEach((x) => console.log(`  ${String(x.share).padStart(5)}%  ${x.name}`));
