@@ -193,7 +193,7 @@ function showVisibilityCard(url){
   pending.visibilityUrl = url;
   $('results').insertAdjacentHTML('beforeend',
     '<div class="card" id="viscard"><h2>AI Visibility</h2><div class="dom">'+esc(url)+'</div>'+
-    '<p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:10px 0 14px">We ask an AI answer engine 10 questions your buyers ask, with live web search on, then check whether it names you, who it names instead, and which sites it cites. It takes about a minute after you unlock.</p>'+
+    '<p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:10px 0 14px">We ask ChatGPT 10 questions your buyers ask, then check whether it names you, who it names instead, and which sites it cites. It takes up to two minutes after you unlock.</p>'+
     '<input class="scan-input" type="text" id="visMetro" placeholder="City or metro you serve (optional), for example Dallas, TX" autocomplete="off">'+
     '<div id="visResult"></div></div>');
 }
@@ -247,7 +247,7 @@ async function unlockAll(){
       else { gateErr = d.message || d.error || 'Could not unlock.'; }
     }
     if(!gateErr && pending.visibilityUrl){
-      msg.style.color='#cbd5e1'; msg.textContent='Asking AI the questions your buyers ask. This takes about a minute…';
+      msg.style.color='#cbd5e1'; msg.textContent='Asking ChatGPT the questions your buyers ask. This takes up to two minutes…';
       const r = await fetch('/api/visibility', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: pending.visibilityUrl, email, metro: ($('visMetro')||{}).value || '' }) });
       const d = await r.json();
       if(d.status==='done'){ emailed = emailed || !!d.emailed; renderVisibility(d); pending.visibilityUrl=null; }
