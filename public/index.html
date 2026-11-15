@@ -219,15 +219,32 @@ function renderGate(){
     '<div class="card" id="gateCard"><h2>Unlock '+parts.join(' and ')+'</h2>'+
     '<p style="color:#94a3b8;font-size:14px;margin-bottom:14px">Enter a work email at the site\'s domain. We\'ll unlock it here and email it to you. Need help? <a href="mailto:support@wintechpartners.com">support@wintechpartners.com</a></p>'+
     '<div style="display:flex;gap:8px"><input class="scan-input" type="email" id="gateEmail" placeholder="you@yourcompany.com" style="flex:1" onkeydown="if(event.key===\'Enter\')unlockAll()">'+
-    '<button onclick="unlockAll()" style="padding:13px 26px;font-size:14px;font-weight:700;border-radius:10px;border:none;background:#22c55e;color:#fff;cursor:pointer;white-space:nowrap">Unlock</button></div>'+
+    '<button id="gateBtn" onclick="unlockAll()" style="padding:13px 26px;font-size:14px;font-weight:700;border-radius:10px;border:none;background:#22c55e;color:#fff;cursor:pointer;white-space:nowrap">Unlock</button></div>'+
     '<div id="gateMsg" style="margin-top:10px;font-size:13px;min-height:18px;color:#64748b"></div></div>');
 }
 
+// Visible progress for the unlock step: spinner, running seconds, and a locked button so a second click cannot start a second run.
+let gateTimer = null;
+function gateBusy(text){
+  const msg = $('gateMsg'), btn = $('gateBtn'), t0 = Date.now();
+  if(btn){ btn.disabled = true; btn.textContent = 'Working…'; btn.style.opacity = '.6'; btn.style.cursor = 'not-allowed'; }
+  clearInterval(gateTimer);
+  const draw = () => { msg.style.color = '#e2e8f0'; msg.style.fontSize = '15px';
+    msg.innerHTML = '<span class="spinner"></span>' + esc(text) + ' <span style="color:#cbd5e1">' + Math.round((Date.now()-t0)/1000) + ' seconds so far.</span>'; };
+  draw(); gateTimer = setInterval(draw, 1000);
+}
+function gateIdle(){
+  clearInterval(gateTimer);
+  const btn = $('gateBtn');
+  if(btn){ btn.disabled = false; btn.textContent = 'Unlock'; btn.style.opacity = ''; btn.style.cursor = 'pointer'; }
+}
+
 async function unlockAll(){
+  if($('gateBtn') && $('gateBtn').disabled) return;
   const email = ($('gateEmail').value||'').trim();
   const msg = $('gateMsg');
   if(!email || !email.includes('@')){ msg.style.color='#ef4444'; msg.textContent='Enter a valid email.'; return; }
-  msg.style.color='#64748b'; msg.textContent='Verifying…';
+  gateBusy('Checking your email.');
   const bothMode = !!(pending.scanId && pending.audienceUrl);
   const scanId = pending.scanId;
   let gateErr = null, emailed = false, audienceId = null;
@@ -247,14 +264,15 @@ async function unlockAll(){
       else { gateErr = d.message || d.error || 'Could not unlock.'; }
     }
     if(!gateErr && pending.visibilityUrl){
-      msg.style.color='#cbd5e1'; msg.textContent='Asking ChatGPT the questions your buyers ask. This takes up to two minutes…';
+      gateBusy('Asking ChatGPT the questions your buyers ask. This usually takes about 90 seconds.');
       const r = await fetch('/api/visibility', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: pending.visibilityUrl, email, metro: ($('visMetro')||{}).value || '' }) });
       const d = await r.json();
       if(d.status==='done'){ emailed = emailed || !!d.emailed; renderVisibility(d); pending.visibilityUrl=null; }
       else { gateErr = d.message || d.error || 'Could not unlock.'; }
     }
   } catch(e){ gateErr = 'Something went wrong. Try again.'; }
-  if(gateErr){ msg.style.color='#ef4444'; msg.textContent = gateErr; return; }
+  gateIdle();
+  if(gateErr){ msg.style.color='#f87171'; msg.style.fontSize='15px'; msg.textContent = gateErr; return; }
   if(bothMode && scanId && audienceId){
     const combined = '/report/'+scanId+'?audience='+audienceId;
     $('webUnlocked').innerHTML = '<div class="gate" style="border-top:1px solid #1e293b"><a href="'+combined+'" target="_blank" rel="noopener" style="background:#6366f1;color:#fff;text-decoration:none;font-weight:700;padding:12px 22px;border-radius:8px;display:inline-block">Open combined report →</a> <span style="color:#64748b;font-size:13px">One report — its Download PDF includes both the website audit and the audience analysis.</span></div>';
