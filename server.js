@@ -9,6 +9,8 @@ const { fullScan, quickScan, checkWpExposure } = require('./lib/scanner');
 const db = require('./lib/db');
 const { runVisibility } = require('./lib/visibility');
 const { visibilityReportHtml } = require('./lib/visibility-report');
+const { dashboardHtml } = require('./lib/visibility-dashboard');
+const { sampleDashboard } = require('./lib/dashboard-sample');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -619,6 +621,12 @@ app.post('/api/visibility', async (req, res) => {
     console.error('[VISIBILITY ERROR]', err);
     return res.status(500).json({ error: 'AI Visibility check failed: ' + err.message });
   }
+});
+
+// Sample of the paid monthly dashboard, built from made-up numbers (no database, no paid calls).
+app.get('/dashboard/sample', (req, res) => {
+  const s = sampleDashboard();
+  res.send(dashboardHtml(s.domain, s.runs, { state: s.state, sample: true }));
 });
 
 app.get('/visibility/:id', async (req, res) => {
