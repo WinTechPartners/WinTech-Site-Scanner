@@ -577,6 +577,18 @@ app.get('/audience/:id', async (req, res) => {
 const VISIBILITY_QUESTIONS = parseInt(process.env.VISIBILITY_QUESTIONS || '10', 10);
 const VISIBILITY_CACHE_DAYS = 30;
 
+// The AI Visibility form lives on wintechpartners.com/seo-aeo, so those origins may call this one route.
+const VISIBILITY_ORIGINS = (process.env.VISIBILITY_ORIGINS || 'https://wintechpartners.com,https://www.wintechpartners.com').split(',');
+app.use('/api/visibility', (req, res, next) => {
+  if (VISIBILITY_ORIGINS.includes(req.headers.origin)) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Vary', 'Origin');
+  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.post('/api/visibility', async (req, res) => {
   const { url, email, metro } = req.body || {};
   if (!url) return res.status(400).json({ error: 'URL is required' });
